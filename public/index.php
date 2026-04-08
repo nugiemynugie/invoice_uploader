@@ -25,6 +25,24 @@ function uploadErrorMessage(int $code): string
     };
 }
 
+function parseIniSizeToBytes(string $value): int
+{
+    $value = trim($value);
+    if ($value == '') {
+        return 0;
+    }
+
+    $unit = strtolower(substr($value, -1));
+    $number = (float) $value;
+
+    return match ($unit) {
+        'g' => (int) ($number * 1024 * 1024 * 1024),
+        'm' => (int) ($number * 1024 * 1024),
+        'k' => (int) ($number * 1024),
+        default => (int) $number,
+    };
+}
+
 function loadEnv(string $path): void
 {
     if (!file_exists($path)) {
@@ -57,7 +75,11 @@ loadEnv($rootPath . '/.env');
 require_once $rootPath . '/services/InvoiceProcessor.php';
 
 $maxUploadMb = (int) (getenv('MAX_UPLOAD_MB') ?: 10);
-$maxUploadBytes = $maxUploadMb * 1024 * 1024;
+$appMaxUploadBytes = $maxUploadMb * 1024 * 1024;
+$phpUploadMaxBytes = parseIniSizeToBytes((string) ini_get('upload_max_filesize'));
+$phpPostMaxBytes = parseIniSizeToBytes((string) ini_get('post_max_size'));
+$effectiveMaxUploadBytes = min(array_filter([$appMaxUploadBytes, $phpUploadMaxBytes, $phpPostMaxBytes]));
+$effectiveMaxUploadMb = (int) floor($effectiveMaxUploadBytes / (1024 * 1024));
 $allowedExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'txt'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload') {
@@ -78,8 +100,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
         ], 400);
     }
 
-    if (($invoice['size'] ?? 0) > $maxUploadBytes) {
-        jsonResponse(['error' => "Ukuran file melebihi {$maxUploadMb} MB."], 400);
+    if (($invoice['size'] ?? 0) > $effectiveMaxUploadBytes) {
+        jsonResponse(['error' => "Ukuran file melebihi batas efektif upload {$effectiveMaxUploadMb} MB."], 400);
     }
 
     $originalName = (string) ($invoice['name'] ?? '');
@@ -141,6 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
   <main class="container">
     <h1>Invoice Uploader (PHP)</h1>
     <p>Upload invoice (PDF/Gambar/TXT), lalu dokumen dibaca langsung oleh Ollama untuk membuat variable invoice otomatis.</p>
+    <p><strong>Batas upload efektif:</strong> <?= htmlspecialchars((string)$effectiveMaxUploadMb) ?> MB (dibatasi oleh php.ini & app).</p>
 
     <form id="upload-form">
       <input type="file" id="invoice" name="invoice" accept=".pdf,.png,.jpg,.jpeg,.txt" required />
@@ -168,7 +191,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
         return;
       }
 
-      formData.append('invoice', fileInput.files[0]);
+      const selected = fileInput.files[0];
+      const maxBytes = <?= (int)$effectiveMaxUploadBytes ?>;
+      if (selected.size > maxBytes) {
+        const maxMb = Math.floor(maxBytes / (1024 * 1024));
+        resultBox.textContent = `File terlalu besar. Maksimal ${maxMb} MB.`;
+        return;
+      }
+
+      formData.append('invoice', selected);
 
       try {
         const response = await fetch('?action=upload', { method: 'POST', body: formData });

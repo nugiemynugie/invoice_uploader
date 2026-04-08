@@ -145,3 +145,47 @@ post_max_size = 20M
 
 Lalu restart PHP/web server.
 
+
+Contoh kasus seperti ini:
+
+```json
+{
+  "error": "Ukuran file melebihi batas upload_max_filesize di php.ini.",
+  "upload_error_code": 1,
+  "php_upload_max_filesize": "2M",
+  "php_post_max_size": "8M"
+}
+```
+
+Artinya limit PHP Anda masih kecil. Solusi cepat:
+
+```bash
+php -d upload_max_filesize=20M -d post_max_size=20M -S 0.0.0.0:8000 -t public
+```
+
+Atau ubah permanen di `php.ini`, lalu restart service PHP.
+
+
+
+### Troubleshooting PDF policy ImageMagick
+
+Jika muncul error:
+
+```text
+attempt to perform an operation not allowed by the security policy `PDF'
+```
+
+Itu berarti policy ImageMagick di server memblok pembacaan PDF.
+
+Sekarang aplikasi sudah ada fallback ke `pdftoppm` (poppler). Pastikan tool ini terpasang:
+
+```bash
+# Ubuntu/Debian
+sudo apt install -y poppler-utils
+
+# macOS
+brew install poppler
+```
+
+Setelah itu jalankan ulang aplikasi.
+

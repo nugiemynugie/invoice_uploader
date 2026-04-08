@@ -77,30 +77,93 @@ class InvoiceProcessor
 
     private function pdfToBase64Images(string $pdfPath, int $maxPages = 3): array
     {
-        if (!extension_loaded('imagick') || !class_exists('Imagick')) {
-            throw new RuntimeException('Ekstensi imagick diperlukan untuk membaca PDF via Ollama vision.');
+        // Prioritas: Imagick (jika policy PDF diizinkan), fallback ke pdftoppm.
+        if (extension_loaded('imagick') && class_exists('Imagick')) {
+            try {
+                $imagick = new Imagick();
+                $imagick->setResolution(200, 200);
+                $imagick->readImage($pdfPath);
+
+                $images = [];
+                $page = 0;
+
+                foreach ($imagick as $frame) {
+                    if ($page >= $maxPages) {
+                        break;
+                    }
+
+                    $frame->setImageFormat('png');
+                    $blob = $frame->getImageBlob();
+                    $images[] = base64_encode($blob);
+                    $page++;
+                }
+
+                $imagick->clear();
+                $imagick->destroy();
+
+                if ($images !== []) {
+                    return $images;
+                }
+            } catch (Throwable $error) {
+                // Lanjut ke fallback pdftoppm (umumnya aman dari policy ImageMagick PDF).
+            }
         }
 
-        $imagick = new Imagick();
-        $imagick->setResolution(200, 200);
-        $imagick->readImage($pdfPath);
+        return $this->pdfToBase64ImagesWithPdftoppm($pdfPath, $maxPages);
+    }
 
+    private function pdfToBase64ImagesWithPdftoppm(string $pdfPath, int $maxPages): array
+    {
+        $binary = trim((string) shell_exec('command -v pdftoppm'));
+        if ($binary === '') {
+            throw new RuntimeException(
+                'PDF tidak bisa diproses. Imagick diblok policy PDF dan pdftoppm tidak ditemukan. Install poppler-utils.'
+            );
+        }
+
+        $tempDir = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'pdfimg_' . bin2hex(random_bytes(6));
+        if (!mkdir($tempDir, 0777, true) && !is_dir($tempDir)) {
+            throw new RuntimeException('Gagal membuat direktori sementara untuk konversi PDF.');
+        }
+
+        $outputPrefix = $tempDir . DIRECTORY_SEPARATOR . 'page';
+        $command = sprintf(
+            '%s -f 1 -singlefile -png %s %s 2>&1',
+            escapeshellcmd($binary),
+            escapeshellarg($pdfPath),
+            escapeshellarg($outputPrefix)
+        );
+
+        // Konversi page-by-page agar bisa batasi jumlah halaman.
         $images = [];
-        $page = 0;
+        for ($page = 1; $page <= $maxPages; $page++) {
+            $pagePrefix = $tempDir . DIRECTORY_SEPARATOR . 'page_' . $page;
+            $cmd = sprintf(
+                '%s -f %d -l %d -singlefile -png %s %s 2>&1',
+                escapeshellcmd($binary),
+                $page,
+                $page,
+                escapeshellarg($pdfPath),
+                escapeshellarg($pagePrefix)
+            );
+            exec($cmd, $output, $code);
 
-        foreach ($imagick as $frame) {
-            if ($page >= $maxPages) {
+            $pngPath = $pagePrefix . '.png';
+            if ($code !== 0 || !file_exists($pngPath)) {
                 break;
             }
 
-            $frame->setImageFormat('png');
-            $blob = $frame->getImageBlob();
-            $images[] = base64_encode($blob);
-            $page++;
+            $images[] = base64_encode((string) file_get_contents($pngPath));
         }
 
-        $imagick->clear();
-        $imagick->destroy();
+        foreach (glob($tempDir . DIRECTORY_SEPARATOR . '*') ?: [] as $tmpFile) {
+            @unlink($tmpFile);
+        }
+        @rmdir($tempDir);
+
+        if ($images === []) {
+            throw new RuntimeException('Gagal konversi PDF ke gambar dengan pdftoppm.');
+        }
 
         return $images;
     }
