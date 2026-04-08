@@ -39,8 +39,14 @@ class MemoryStore
     public function saveConfirmedPo(string $vendorName, string $poNumber, ?string $sourceVariable = null): void
     {
         $vendorKey = $this->normalizeVendor($vendorName);
-        if ($vendorKey === '' || trim($poNumber) === '') {
+        $poNumber = $this->normalizePoNumber($poNumber);
+
+        if ($vendorKey === '' || $poNumber === '') {
             throw new InvalidArgumentException('Vendor dan PO number wajib diisi.');
+        }
+
+        if (!$this->isValidPoFormat($poNumber)) {
+            throw new InvalidArgumentException('Format PO harus 5 alfanumerik-6 angka-6 angka (contoh: ABC12-123456-789012).');
         }
 
         $data = $this->read();
@@ -52,6 +58,17 @@ class MemoryStore
         ];
 
         $this->write($data);
+    }
+
+
+    private function normalizePoNumber(string $poNumber): string
+    {
+        return strtoupper(trim($poNumber));
+    }
+
+    private function isValidPoFormat(string $poNumber): bool
+    {
+        return (bool) preg_match('/^[A-Z0-9]{5}-[0-9]{6}-[0-9]{6}$/', strtoupper(trim($poNumber)));
     }
 
     private function normalizeVendor(string $vendorName): string

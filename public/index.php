@@ -202,7 +202,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
       <p>Jika hasil sudah benar, simpan vendor + PO agar jadi memory.</p>
       <form id="memory-form">
         <input type="text" id="vendor" placeholder="Nama Vendor" required />
-        <input type="text" id="po_number" placeholder="Nomor PO" required />
+        <input type="text" id="po_number" placeholder="Nomor PO (AAAAA-999999-999999)" required />
         <select id="source_variable">
           <option value="analysis.po_number">Gunakan analysis.po_number (Recommended)</option>
         </select>
@@ -297,9 +297,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
       e.preventDefault();
       memoryResult.textContent = 'Menyimpan memory...';
 
+      const poNumber = document.getElementById('po_number').value.trim().toUpperCase();
+      const poRegex = /^[A-Z0-9]{5}-[0-9]{6}-[0-9]{6}$/;
+      if (!poRegex.test(poNumber)) {
+        memoryResult.textContent = 'Format PO harus AAAAA-999999-999999';
+        return;
+      }
+
       const payload = {
         vendor: document.getElementById('vendor').value,
-        po_number: document.getElementById('po_number').value,
+        po_number: poNumber,
         source_variable: document.getElementById('source_variable').value,
       };
 

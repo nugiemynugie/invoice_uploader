@@ -203,3 +203,10 @@ Sekarang aplikasi mendukung memory sederhana untuk PO per vendor:
 
 Endpoint yang dipakai UI:
 - `POST ?action=confirm_memory` dengan payload JSON `{ "vendor": "...", "po_number": "...", "source_variable": "analysis.po_number" }`.
+
+
+### Format PO yang dipakai
+
+PO number divalidasi dengan format wajib: `AAAAA-999999-999999` (5 alfanumerik - 6 angka - 6 angka).
+
+Contoh valid: `AB123-123456-789012`.

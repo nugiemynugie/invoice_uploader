@@ -26,6 +26,7 @@ class InvoiceProcessor
             default => throw new InvalidArgumentException("Format file tidak didukung: {$extension}"),
         };
 
+        $result = $this->normalizePoFromAnalysis($result);
         $result = $this->applyMemoryFallback($result);
 
         return [
@@ -294,6 +295,6 @@ class InvoiceProcessor
             . "  \"notes\": string|null,\n"
             . "  \"raw_text_summary\": string|null\n"
             . "}\n"
-            . "Balas JSON saja, tanpa markdown atau penjelasan. Jika ada teks seperti PO/No PO/Purchase Order, isi ke field po_number.";
+            . "Balas JSON saja, tanpa markdown atau penjelasan. Jika ada teks seperti PO/No PO/Purchase Order, isi ke field po_number dengan format wajib AAAAA-999999-999999 (5 karakter alfanumerik, lalu 6 digit angka, lalu 6 digit angka).";
     }
 }
