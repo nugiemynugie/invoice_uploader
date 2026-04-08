@@ -230,6 +230,52 @@ class InvoiceProcessor
     }
 
 
+
+    private function normalizePoFromAnalysis(array $analysis): array
+    {
+        $candidate = '';
+
+        if (!empty($analysis['po_number']) && is_string($analysis['po_number'])) {
+            $candidate = trim($analysis['po_number']);
+        }
+
+        if (!$this->isValidPoFormat($candidate)) {
+            $candidate = '';
+            foreach (['invoice_number', 'notes', 'raw_text_summary'] as $key) {
+                $value = (string) ($analysis[$key] ?? '');
+                $found = $this->extractPoFromText($value);
+                if ($found !== null) {
+                    $candidate = $found;
+                    break;
+                }
+            }
+        }
+
+        $analysis['po_number'] = $this->isValidPoFormat($candidate) ? strtoupper($candidate) : null;
+        $analysis['po_format'] = 'AAAAA-999999-999999';
+        $analysis['po_format_valid'] = $analysis['po_number'] !== null;
+
+        return $analysis;
+    }
+
+    private function extractPoFromText(string $text): ?string
+    {
+        if (preg_match('/\b([A-Za-z0-9]{5}-[0-9]{6}-[0-9]{6})\b/', $text, $matches)) {
+            return strtoupper($matches[1]);
+        }
+
+        return null;
+    }
+
+    private function isValidPoFormat(?string $poNumber): bool
+    {
+        if ($poNumber === null) {
+            return false;
+        }
+
+        return (bool) preg_match('/^[A-Za-z0-9]{5}-[0-9]{6}-[0-9]{6}$/', trim($poNumber));
+    }
+
     private function basePromptWithMemoryHint(): string
     {
         $basePrompt = $this->basePrompt();
