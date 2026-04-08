@@ -204,7 +204,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
         <input type="text" id="vendor" placeholder="Nama Vendor" required />
         <input type="text" id="po_number" placeholder="Nomor PO (AAAAA-999999-999999)" required />
         <select id="source_variable">
-          <option value="analysis.po_number">Gunakan analysis.po_number (Recommended)</option>
+          <option value="analysis.po_number">Semua variable scan akan tampil</option>
         </select>
         <button type="submit">Simpan Memory</button>
       </form>
@@ -219,57 +219,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
     const memoryResult = document.getElementById('memory-result');
 
     function shortValue(value) {
-      const text = String(value || '').trim();
-      if (text.length <= 28) return text;
-      return text.slice(0, 28) + '...';
+      const text = String(value ?? '').trim();
+      if (text.length <= 40) return text;
+      return text.slice(0, 40) + '...';
     }
 
-    function buildVariableRecommendations(analysis) {
-      const options = [];
+    function flattenAnalysisVariables(input, prefix = 'analysis') {
+      const items = [];
 
-      const addOption = (path, sample, recommended = false) => {
-        if (!sample) return;
-        const prefix = recommended ? '(Recommended) ' : '';
-        options.push({
-          value: path,
-          label: `${prefix}${path} => ${shortValue(sample)}`,
-          sample,
+      if (Array.isArray(input)) {
+        input.forEach((value, index) => {
+          items.push(...flattenAnalysisVariables(value, `${prefix}[${index}]`));
         });
-      };
-
-      if (!analysis || typeof analysis !== 'object') {
-        addOption('analysis.po_number', '', true);
-        return options;
+        return items;
       }
 
-      addOption('analysis.po_number', analysis.po_number || '', true);
-
-      for (const [key, value] of Object.entries(analysis)) {
-        if (typeof value !== 'string' || value.trim() === '') continue;
-        if (/po|purchase\s*order/i.test(key) || /po|purchase\s*order/i.test(value)) {
-          addOption(`analysis.${key}`, value);
+      if (input !== null && typeof input === 'object') {
+        for (const [key, value] of Object.entries(input)) {
+          items.push(...flattenAnalysisVariables(value, `${prefix}.${key}`));
         }
+        return items;
       }
 
-      if (typeof analysis.invoice_number === 'string' && analysis.invoice_number) {
-        addOption('analysis.invoice_number', analysis.invoice_number);
+      items.push({ path: prefix, value: input });
+      return items;
+    }
+
+    function buildAllVariableOptions(analysis) {
+      if (!analysis || typeof analysis !== 'object') {
+        return [{ value: 'analysis.po_number', label: 'analysis.po_number => (kosong)' }];
       }
 
-      if (typeof analysis.notes === 'string' && analysis.notes) {
-        addOption('analysis.notes', analysis.notes);
-      }
-
-      return options;
+      const flattened = flattenAnalysisVariables(analysis);
+      return flattened.map((item) => ({
+        value: item.path,
+        label: `${item.path} => ${shortValue(item.value)}`,
+      }));
     }
 
     function renderSourceVariableOptions(analysis) {
       const select = document.getElementById('source_variable');
       select.innerHTML = '';
+      const built = buildAllVariableOptions(analysis);
       const seen = new Set();
-      const built = buildVariableRecommendations(analysis);
-      if (built.length === 0) {
-        built.push({ value: 'analysis.po_number', label: '(Recommended) analysis.po_number => (kosong)' });
-      }
+
       for (const option of built) {
         if (seen.has(option.value)) continue;
         seen.add(option.value);
