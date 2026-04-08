@@ -19,7 +19,7 @@ class MemoryStore
         }
     }
 
-    public function getPoHint(string $vendorName): ?string
+    public function getPoMemory(string $vendorName): ?array
     {
         $vendorKey = $this->normalizeVendor($vendorName);
         if ($vendorKey === '') {
@@ -27,10 +27,16 @@ class MemoryStore
         }
 
         $data = $this->read();
-        return $data['vendors'][$vendorKey]['default_po_number'] ?? null;
+        $memory = $data['vendors'][$vendorKey] ?? null;
+
+        if (!is_array($memory) || empty($memory['default_po_number'])) {
+            return null;
+        }
+
+        return $memory;
     }
 
-    public function saveConfirmedPo(string $vendorName, string $poNumber): void
+    public function saveConfirmedPo(string $vendorName, string $poNumber, ?string $sourceVariable = null): void
     {
         $vendorKey = $this->normalizeVendor($vendorName);
         if ($vendorKey === '' || trim($poNumber) === '') {
@@ -41,6 +47,7 @@ class MemoryStore
         $data['vendors'][$vendorKey] = [
             'vendor_name' => $vendorName,
             'default_po_number' => $poNumber,
+            'source_variable' => $sourceVariable,
             'updated_at' => date('c'),
         ];
 

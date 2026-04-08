@@ -86,14 +86,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'confir
     $payload = json_decode((string) file_get_contents('php://input'), true);
     $vendor = trim((string) ($payload['vendor'] ?? ''));
     $poNumber = trim((string) ($payload['po_number'] ?? ''));
+    $sourceVariable = trim((string) ($payload['source_variable'] ?? ''));
 
     try {
         $memoryStore = new MemoryStore($rootPath . '/storage/memory.json');
-        $memoryStore->saveConfirmedPo($vendor, $poNumber);
+        $memoryStore->saveConfirmedPo($vendor, $poNumber, $sourceVariable !== '' ? $sourceVariable : null);
         jsonResponse([
             'message' => 'Memory PO berhasil disimpan.',
             'vendor' => $vendor,
             'po_number' => $poNumber,
+            'source_variable' => $sourceVariable !== '' ? $sourceVariable : null,
         ]);
     } catch (Throwable $exception) {
         jsonResponse(['error' => $exception->getMessage()], 400);
@@ -201,6 +203,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
       <form id="memory-form">
         <input type="text" id="vendor" placeholder="Nama Vendor" required />
         <input type="text" id="po_number" placeholder="Nomor PO" required />
+        <select id="source_variable">
+          <option value="analysis.po_number">Gunakan analysis.po_number (Recommended)</option>
+        </select>
         <button type="submit">Simpan Memory</button>
       </form>
       <pre id="memory-result">Belum ada memory update.</pre>
@@ -212,6 +217,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
     const resultBox = document.getElementById('result');
     const memoryForm = document.getElementById('memory-form');
     const memoryResult = document.getElementById('memory-result');
+
+    function buildVariableRecommendations(analysis) {
+      const options = [{ value: 'analysis.po_number', label: 'analysis.po_number (Recommended)' }];
+
+      if (!analysis || typeof analysis !== 'object') {
+        return options;
+      }
+
+      for (const [key, value] of Object.entries(analysis)) {
+        if (typeof value !== 'string' || value.trim() === '') continue;
+        if (/po|purchase\s*order/i.test(key) || /po|purchase\s*order/i.test(value)) {
+          options.push({ value: `analysis.${key}`, label: `analysis.${key}` });
+        }
+      }
+
+      if (typeof analysis.invoice_number === 'string' && analysis.invoice_number) {
+        options.push({ value: 'analysis.invoice_number', label: 'analysis.invoice_number' });
+      }
+
+      if (typeof analysis.notes === 'string' && analysis.notes) {
+        options.push({ value: 'analysis.notes', label: 'analysis.notes' });
+      }
+
+      return options;
+    }
+
+    function renderSourceVariableOptions(analysis) {
+      const select = document.getElementById('source_variable');
+      select.innerHTML = '';
+      const seen = new Set();
+      for (const option of buildVariableRecommendations(analysis)) {
+        if (seen.has(option.value)) continue;
+        seen.add(option.value);
+        const el = document.createElement('option');
+        el.value = option.value;
+        el.textContent = option.label;
+        select.appendChild(el);
+      }
+    }
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -242,6 +286,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
         if (data.analysis) {
           document.getElementById('vendor').value = data.analysis.vendor || '';
           document.getElementById('po_number').value = data.analysis.po_number || '';
+          renderSourceVariableOptions(data.analysis);
         }
       } catch (err) {
         resultBox.textContent = `Gagal: ${err}`;
@@ -255,6 +300,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
       const payload = {
         vendor: document.getElementById('vendor').value,
         po_number: document.getElementById('po_number').value,
+        source_variable: document.getElementById('source_variable').value,
       };
 
       try {

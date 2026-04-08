@@ -253,14 +253,21 @@ class InvoiceProcessor
             return $analysis;
         }
 
-        $poHint = $this->memoryStore->getPoHint($vendor);
-        if ($poHint === null || $poHint === '') {
+        $poMemory = $this->memoryStore->getPoMemory($vendor);
+        if ($poMemory === null) {
+            return $analysis;
+        }
+
+        $poHint = (string) ($poMemory['default_po_number'] ?? "");
+        $sourceVariable = (string) ($poMemory['source_variable'] ?? "");
+        if ($poHint === "") {
             return $analysis;
         }
 
         if ($poNumber === '') {
             $analysis['po_number'] = $poHint;
             $analysis['po_source'] = 'memory_fallback';
+            $analysis['po_source_variable'] = $sourceVariable !== "" ? $sourceVariable : null;
         } else {
             $analysis['po_source'] = 'document';
         }
