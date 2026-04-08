@@ -210,3 +210,35 @@ Endpoint yang dipakai UI:
 PO number divalidasi dengan format wajib: `AAAAA-999999-999999` (5 alfanumerik - 6 angka - 6 angka).
 
 Contoh valid: `AB123-123456-789012`.
+
+
+### Troubleshooting output bukan JSON valid
+
+Jika muncul error:
+
+```json
+{"error":"Output model bukan JSON valid."}
+```
+
+Sekarang aplikasi sudah:
+- meminta Ollama output `format: json`
+- mencoba recovery JSON otomatis jika model masih menyisipkan teks tambahan.
+
+Jika masih gagal, coba:
+1. gunakan model yang lebih stabil untuk JSON,
+2. kecilkan dokumen (halaman tidak terlalu banyak),
+3. ulangi request sekali lagi.
+
+
+## Mapping Koreksi Nilai Scan
+
+Jika hasil scan salah (mis. `invoice_number` salah baca), Anda bisa simpan mapping:
+
+- vendor
+- field
+- wrong_value (hasil scan salah)
+- correct_value (nilai yang benar)
+
+Endpoint: `POST ?action=confirm_mapping`
+
+Setelah disimpan, pada upload berikutnya nilai salah yang sama akan otomatis dibetulkan dari memory mapping.

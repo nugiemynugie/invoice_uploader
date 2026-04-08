@@ -102,6 +102,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'confir
     }
 }
 
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'confirm_mapping') {
+    $payload = json_decode((string) file_get_contents('php://input'), true);
+    $vendor = trim((string) ($payload['vendor'] ?? ''));
+    $field = trim((string) ($payload['field'] ?? ''));
+    $wrongValue = trim((string) ($payload['wrong_value'] ?? ''));
+    $correctValue = trim((string) ($payload['correct_value'] ?? ''));
+
+    try {
+        $memoryStore = new MemoryStore($rootPath . '/storage/memory.json');
+        $memoryStore->saveFieldCorrection($vendor, $field, $wrongValue, $correctValue);
+        jsonResponse([
+            'message' => 'Mapping koreksi berhasil disimpan.',
+            'vendor' => $vendor,
+            'field' => $field,
+            'wrong_value' => $wrongValue,
+            'correct_value' => $correctValue,
+        ]);
+    } catch (Throwable $exception) {
+        jsonResponse(['error' => $exception->getMessage()], 400);
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload') {
     if (!isset($_FILES['invoice'])) {
         jsonResponse(['error' => 'File invoice tidak ditemukan pada request.'], 400);
@@ -210,6 +233,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
       </form>
       <pre id="memory-result">Belum ada memory update.</pre>
     </section>
+
+    <section>
+      <h2>Simpan Mapping Koreksi</h2>
+      <p>Jika hasil scan salah, simpan pasangan nilai salah -> benar per field.</p>
+      <form id="mapping-form">
+        <input type="text" id="map_vendor" placeholder="Nama Vendor" required />
+        <input type="text" id="map_field" placeholder="Field (contoh: invoice_number)" required />
+        <input type="text" id="map_wrong" placeholder="Nilai hasil scan (salah)" required />
+        <input type="text" id="map_correct" placeholder="Nilai benar" required />
+        <button type="submit">Simpan Mapping</button>
+      </form>
+      <pre id="mapping-result">Belum ada mapping update.</pre>
+    </section>
   </main>
 
   <script>
@@ -217,6 +253,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
     const resultBox = document.getElementById('result');
     const memoryForm = document.getElementById('memory-form');
     const memoryResult = document.getElementById('memory-result');
+    const mappingForm = document.getElementById('mapping-form');
+    const mappingResult = document.getElementById('mapping-result');
 
     function shortValue(value) {
       const text = String(value ?? '').trim();
@@ -302,6 +340,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
         if (data.analysis) {
           document.getElementById('vendor').value = data.analysis.vendor || '';
           document.getElementById('po_number').value = data.analysis.po_number || '';
+          document.getElementById('map_vendor').value = data.analysis.vendor || '';
           renderSourceVariableOptions(data.analysis);
         }
       } catch (err) {
@@ -338,6 +377,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
         memoryResult.textContent = `Gagal simpan memory: ${err}`;
       }
     });
+
+
+    mappingForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      mappingResult.textContent = 'Menyimpan mapping...';
+
+      const payload = {
+        vendor: document.getElementById('map_vendor').value,
+        field: document.getElementById('map_field').value,
+        wrong_value: document.getElementById('map_wrong').value,
+        correct_value: document.getElementById('map_correct').value,
+      };
+
+      try {
+        const response = await fetch('?action=confirm_mapping', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        mappingResult.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        mappingResult.textContent = `Gagal simpan mapping: ${err}`;
+      }
+    });
+
   </script>
 </body>
 </html>

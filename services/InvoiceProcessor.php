@@ -28,6 +28,7 @@ class InvoiceProcessor
 
         $result = $this->normalizePoFromAnalysis($result);
         $result = $this->applyMemoryFallback($result);
+        $result = $this->applyFieldCorrections($result);
 
         return [
             'filename' => basename($filePath),
@@ -179,6 +180,7 @@ class InvoiceProcessor
             'model' => $this->modelName,
             'messages' => $messages,
             'stream' => false,
+            'format' => 'json',
             'options' => ['temperature' => 0],
         ];
 
@@ -222,11 +224,40 @@ class InvoiceProcessor
         $clean = trim(str_replace(["```json", "```"], '', $content));
         $analysis = json_decode($clean, true);
 
-        if (!is_array($analysis)) {
-            throw new RuntimeException('Output model bukan JSON valid.');
+        if (is_array($analysis)) {
+            return $analysis;
         }
 
-        return $analysis;
+        $recovered = $this->recoverJsonFromText($clean);
+        if ($recovered !== null) {
+            return $recovered;
+        }
+
+        throw new RuntimeException('Output model bukan JSON valid.');
+    }
+
+    private function recoverJsonFromText(string $text): ?array
+    {
+        // Coba ambil blok objek JSON terbesar.
+        if (preg_match('/\{(?:[^{}]|(?R))*\}/s', $text, $match)) {
+            $decoded = json_decode($match[0], true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        // Fallback: ambil dari kurung kurawal pertama sampai terakhir.
+        $start = strpos($text, '{');
+        $end = strrpos($text, '}');
+        if ($start !== false && $end !== false && $end > $start) {
+            $candidate = substr($text, $start, $end - $start + 1);
+            $decoded = json_decode($candidate, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return null;
     }
 
 
@@ -247,6 +278,20 @@ class InvoiceProcessor
                 if ($found !== null) {
                     $candidate = $found;
                     break;
+                }
+            }
+
+            if ($candidate === '' && $this->memoryStore !== null) {
+                $vendor = (string) ($analysis['vendor'] ?? '');
+                $memory = $this->memoryStore->getPoMemory($vendor);
+                if (is_array($memory) && !empty($memory['po_prefix'])) {
+                    foreach (['notes', 'raw_text_summary'] as $key) {
+                        $v = (string) ($analysis[$key] ?? '');
+                        if (preg_match('/\b([0-9]{6})-([0-9]{6})\b/', $v, $m)) {
+                            $candidate = strtoupper($memory['po_prefix']) . '-' . $m[1] . '-' . $m[2];
+                            break;
+                        }
+                    }
                 }
             }
         }

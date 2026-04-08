@@ -50,16 +50,67 @@ class MemoryStore
         }
 
         $data = $this->read();
-        $data['vendors'][$vendorKey] = [
+        $existing = $data['vendors'][$vendorKey] ?? [];
+        $data['vendors'][$vendorKey] = array_merge($existing, [
             'vendor_name' => $vendorName,
             'default_po_number' => $poNumber,
+            'po_prefix' => substr($poNumber, 0, 5),
             'source_variable' => $sourceVariable,
             'updated_at' => date('c'),
-        ];
+        ]);
 
         $this->write($data);
     }
 
+    public function saveFieldCorrection(string $vendorName, string $field, string $wrongValue, string $correctValue): void
+    {
+        $vendorKey = $this->normalizeVendor($vendorName);
+        $field = trim($field);
+        $wrongValue = trim($wrongValue);
+        $correctValue = trim($correctValue);
+
+        if ($vendorKey === '' || $field === '' || $wrongValue === '' || $correctValue === '') {
+            throw new InvalidArgumentException('Vendor, field, wrong_value, dan correct_value wajib diisi.');
+        }
+
+        $data = $this->read();
+        $existing = $data['vendors'][$vendorKey] ?? ['vendor_name' => $vendorName];
+        $existing['corrections'] = $existing['corrections'] ?? [];
+        $existing['corrections'][$field] = $existing['corrections'][$field] ?? [];
+        $existing['corrections'][$field][$wrongValue] = $correctValue;
+        $existing['updated_at'] = date('c');
+
+        $data['vendors'][$vendorKey] = $existing;
+        $this->write($data);
+    }
+
+    public function applyCorrections(string $vendorName, array $analysis): array
+    {
+        $vendorKey = $this->normalizeVendor($vendorName);
+        if ($vendorKey === '') {
+            return $analysis;
+        }
+
+        $data = $this->read();
+        $corrections = $data['vendors'][$vendorKey]['corrections'] ?? null;
+        if (!is_array($corrections)) {
+            return $analysis;
+        }
+
+        foreach ($corrections as $field => $maps) {
+            if (!array_key_exists($field, $analysis) || !is_array($maps)) {
+                continue;
+            }
+
+            $current = (string) ($analysis[$field] ?? '');
+            if ($current !== '' && isset($maps[$current])) {
+                $analysis[$field] = $maps[$current];
+                $analysis['correction_source'][$field] = 'memory_mapping';
+            }
+        }
+
+        return $analysis;
+    }
 
     private function normalizePoNumber(string $poNumber): string
     {
