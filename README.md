@@ -35,6 +35,21 @@ git clone <url-repo-anda>
 cd invoice_uploader
 ```
 
+### Lokasi folder project (penting)
+
+Boleh di mana saja, tergantung environment:
+
+- **Local development**: bebas, contoh `~/projects/invoice_uploader`
+- **Server Linux + Apache/Nginx (umum)**: biasanya di `/var/www/`, contoh:
+
+```bash
+cd /var/www
+git clone <url-repo-anda> invoice_uploader
+cd invoice_uploader
+```
+
+> Jika pakai Apache/Nginx, arahkan document root ke folder `public/`.
+
 ### 2) Install dependency sistem
 
 #### Ubuntu / Debian
@@ -112,3 +127,21 @@ Kalau output `curl` menampilkan daftar model, berarti koneksi ke Ollama berhasil
 - Jika model lokal Anda bukan `gemma4`, ganti `OLLAMA_MODEL`.
 - Untuk akurasi terbaik pada scan, gunakan gambar/PDF yang tajam.
 - Jika PDF gagal diproses, pastikan `imagick` aktif dan ImageMagick mendukung pembacaan PDF.
+
+
+### Troubleshooting upload
+
+Jika muncul error upload, cek nilai berikut pada response API:
+- `upload_error_code`
+- `php_upload_max_filesize`
+- `php_post_max_size`
+
+Jika file besar, naikkan limit di `php.ini`:
+
+```ini
+upload_max_filesize = 20M
+post_max_size = 20M
+```
+
+Lalu restart PHP/web server.
+

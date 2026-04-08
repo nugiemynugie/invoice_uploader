@@ -10,6 +10,21 @@ function jsonResponse(array $payload, int $status = 200): never
     exit;
 }
 
+
+function uploadErrorMessage(int $code): string
+{
+    return match ($code) {
+        UPLOAD_ERR_INI_SIZE => 'Ukuran file melebihi batas upload_max_filesize di php.ini.',
+        UPLOAD_ERR_FORM_SIZE => 'Ukuran file melebihi batas MAX_FILE_SIZE form.',
+        UPLOAD_ERR_PARTIAL => 'File hanya ter-upload sebagian. Coba ulangi.',
+        UPLOAD_ERR_NO_FILE => 'Tidak ada file yang dikirim.',
+        UPLOAD_ERR_NO_TMP_DIR => 'Folder temporary upload tidak ditemukan (upload_tmp_dir).',
+        UPLOAD_ERR_CANT_WRITE => 'Gagal menulis file ke disk.',
+        UPLOAD_ERR_EXTENSION => 'Upload dihentikan oleh extension PHP.',
+        default => 'Terjadi error upload tidak diketahui.',
+    };
+}
+
 function loadEnv(string $path): void
 {
     if (!file_exists($path)) {
@@ -52,8 +67,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
 
     $invoice = $_FILES['invoice'];
 
-    if (($invoice['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-        jsonResponse(['error' => 'Gagal upload file.'], 400);
+    $uploadError = (int) ($invoice['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($uploadError !== UPLOAD_ERR_OK) {
+        jsonResponse([
+            'error' => uploadErrorMessage($uploadError),
+            'upload_error_code' => $uploadError,
+            'php_upload_max_filesize' => ini_get('upload_max_filesize'),
+            'php_post_max_size' => ini_get('post_max_size'),
+            'app_max_upload_mb' => $maxUploadMb,
+        ], 400);
     }
 
     if (($invoice['size'] ?? 0) > $maxUploadBytes) {
@@ -75,8 +97,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
     $safeName = preg_replace('/[^a-zA-Z0-9._-]/', '_', $originalName) ?: ('invoice.' . $extension);
     $targetPath = $uploadsDir . '/' . uniqid('invoice_', true) . '_' . $safeName;
 
-    if (!move_uploaded_file((string) $invoice['tmp_name'], $targetPath)) {
-        jsonResponse(['error' => 'Gagal menyimpan file upload.'], 500);
+    $tmpName = (string) ($invoice['tmp_name'] ?? '');
+    $moved = $tmpName !== '' && move_uploaded_file($tmpName, $targetPath);
+    if (!$moved && $tmpName !== '' && is_file($tmpName)) {
+        $moved = rename($tmpName, $targetPath);
+    }
+
+    if (!$moved) {
+        jsonResponse([
+            'error' => 'Gagal menyimpan file upload.',
+            'tmp_name' => $tmpName,
+            'is_uploaded_file' => $tmpName !== '' ? is_uploaded_file($tmpName) : false,
+            'upload_tmp_dir' => ini_get('upload_tmp_dir') ?: '(default sistem)',
+        ], 500);
     }
 
     try {
