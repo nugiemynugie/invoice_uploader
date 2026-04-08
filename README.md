@@ -24,7 +24,46 @@ Struktur dipisah agar mudah dipindah ke Laravel:
 3. Model vision yang mendukung baca gambar/PDF-as-image (contoh: `gemma4` sesuai setup Anda)
 4. Untuk PDF: ekstensi PHP `imagick` terpasang
 
-## Setup
+---
+
+## Cara Instalasi (Step-by-step)
+
+### 1) Clone project
+
+```bash
+git clone <url-repo-anda>
+cd invoice_uploader
+```
+
+### 2) Install dependency sistem
+
+#### Ubuntu / Debian
+
+```bash
+sudo apt update
+sudo apt install -y php php-cli php-curl php-imagick imagemagick
+```
+
+#### macOS (Homebrew)
+
+```bash
+brew install php imagemagick
+pecl install imagick
+```
+
+> Setelah install `imagick`, pastikan extension-nya aktif di `php.ini`.
+
+### 3) Install dan jalankan Ollama
+
+- Install Ollama dari: https://ollama.com/download
+- Jalankan service Ollama, lalu pull model:
+
+```bash
+ollama pull gemma4
+ollama run gemma4
+```
+
+### 4) Setup environment project
 
 ```bash
 cp .env.example .env
@@ -38,13 +77,28 @@ OLLAMA_MODEL=gemma4
 MAX_UPLOAD_MB=10
 ```
 
-## Jalankan
+### 5) Jalankan aplikasi
 
 ```bash
 php -S 0.0.0.0:8000 -t public
 ```
 
-Buka: `http://localhost:8000`
+Buka browser:
+
+```text
+http://localhost:8000
+```
+
+### 6) Cek cepat instalasi
+
+```bash
+php -m | grep -E "curl|imagick"
+curl http://localhost:11434/api/tags
+```
+
+Kalau output `curl` menampilkan daftar model, berarti koneksi ke Ollama berhasil.
+
+---
 
 ## Alur
 
@@ -57,3 +111,4 @@ Buka: `http://localhost:8000`
 
 - Jika model lokal Anda bukan `gemma4`, ganti `OLLAMA_MODEL`.
 - Untuk akurasi terbaik pada scan, gunakan gambar/PDF yang tajam.
+- Jika PDF gagal diproses, pastikan `imagick` aktif dan ImageMagick mendukung pembacaan PDF.
