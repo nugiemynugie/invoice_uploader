@@ -15,7 +15,7 @@ Struktur dipisah agar mudah dipindah ke Laravel:
   - TXT: isi teks dikirim ke model.
   - Gambar: dikirim sebagai input vision ke model.
   - PDF: dikonversi ke gambar (Imagick), lalu dibaca model vision.
-- Output JSON variabel invoice (vendor, nomor invoice, tanggal, total, item, dll).
+- Output JSON variabel invoice (vendor, nomor invoice, **nomor PO**, tanggal, total, item, dll).
 
 ## Prasyarat
 

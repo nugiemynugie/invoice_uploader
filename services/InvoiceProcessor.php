@@ -230,6 +230,7 @@ class InvoiceProcessor
             . "{\n"
             . "  \"vendor\": string|null,\n"
             . "  \"invoice_number\": string|null,\n"
+            . "  \"po_number\": string|null,\n"
             . "  \"invoice_date\": string|null,\n"
             . "  \"due_date\": string|null,\n"
             . "  \"currency\": string|null,\n"
@@ -242,6 +243,6 @@ class InvoiceProcessor
             . "  \"notes\": string|null,\n"
             . "  \"raw_text_summary\": string|null\n"
             . "}\n"
-            . "Balas JSON saja, tanpa markdown atau penjelasan.";
+            . "Balas JSON saja, tanpa markdown atau penjelasan. Jika ada teks seperti PO/No PO/Purchase Order, isi ke field po_number.";
     }
 }
