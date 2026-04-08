@@ -332,6 +332,21 @@ class InvoiceProcessor
             . "\nTambahan: jika vendor cocok dengan memory internal, prioritaskan PO berdasarkan konteks invoice.";
     }
 
+
+    private function applyFieldCorrections(array $analysis): array
+    {
+        if ($this->memoryStore === null) {
+            return $analysis;
+        }
+
+        $vendor = (string) ($analysis['vendor'] ?? '');
+        if ($vendor === '') {
+            return $analysis;
+        }
+
+        return $this->memoryStore->applyCorrections($vendor, $analysis);
+    }
+
     private function applyMemoryFallback(array $analysis): array
     {
         if ($this->memoryStore === null) {
