@@ -266,14 +266,14 @@ class InvoiceProcessor
     {
         $candidate = '';
 
+        $stringValues = $this->collectStringValues($analysis);
+
         if (!empty($analysis['po_number']) && is_string($analysis['po_number'])) {
             $candidate = trim($analysis['po_number']);
         }
 
         if (!$this->isValidPoFormat($candidate)) {
-            $candidate = '';
-            foreach (['invoice_number', 'notes', 'raw_text_summary'] as $key) {
-                $value = (string) ($analysis[$key] ?? '');
+            foreach ($stringValues as $value) {
                 $found = $this->extractPoFromText($value);
                 if ($found !== null) {
                     $candidate = $found;
@@ -285,8 +285,7 @@ class InvoiceProcessor
                 $vendor = (string) ($analysis['vendor'] ?? '');
                 $memory = $this->memoryStore->getPoMemory($vendor);
                 if (is_array($memory) && !empty($memory['po_prefix'])) {
-                    foreach (['notes', 'raw_text_summary'] as $key) {
-                        $v = (string) ($analysis[$key] ?? '');
+                    foreach ($stringValues as $v) {
                         if (preg_match('/\b([0-9]{6})-([0-9]{6})\b/', $v, $m)) {
                             $candidate = strtoupper($memory['po_prefix']) . '-' . $m[1] . '-' . $m[2];
                             break;
@@ -303,10 +302,44 @@ class InvoiceProcessor
         return $analysis;
     }
 
+    private function collectStringValues(array $data): array
+    {
+        $values = [];
+
+        $walker = function ($node) use (&$values, &$walker): void {
+            if (is_string($node) && trim($node) !== '') {
+                $values[] = $node;
+                return;
+            }
+
+            if (is_array($node)) {
+                foreach ($node as $child) {
+                    $walker($child);
+                }
+            }
+        };
+
+        $walker($data);
+
+        return $values;
+    }
+
     private function extractPoFromText(string $text): ?string
     {
-        if (preg_match('/\b([A-Za-z0-9]{5}-[0-9]{6}-[0-9]{6})\b/', $text, $matches)) {
-            return strtoupper($matches[1]);
+        $patterns = [
+            '/\b([A-Za-z0-9]{5}-[0-9]{6}-[0-9]{6})\b/',
+            '/\b([A-Za-z0-9]{5})[- ]?([0-9]{6})[- ]([0-9]{6})\b/',
+            '/\b([A-Za-z0-9]{5})([0-9]{6})[- ]([0-9]{6})\b/',
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $text, $matches)) {
+                if (count($matches) >= 4) {
+                    return strtoupper($matches[1] . '-' . $matches[2] . '-' . $matches[3]);
+                }
+
+                return strtoupper($matches[1]);
+            }
         }
 
         return null;
@@ -399,8 +432,9 @@ class InvoiceProcessor
             . "    {\"description\": string|null, \"quantity\": number|null, \"unit_price\": number|null, \"amount\": number|null}\n"
             . "  ],\n"
             . "  \"notes\": string|null,\n"
-            . "  \"raw_text_summary\": string|null\n"
+            . "  \"raw_text_summary\": string|null,\n"
+            . "  \"po_raw_candidates\": [string]\n"
             . "}\n"
-            . "Balas JSON saja, tanpa markdown atau penjelasan. Jika ada teks seperti PO/No PO/Purchase Order, isi ke field po_number dengan format wajib AAAAA-999999-999999 (5 karakter alfanumerik, lalu 6 digit angka, lalu 6 digit angka).";
+            . "Balas JSON saja, tanpa markdown atau penjelasan. Jika ada teks seperti PO/No PO/Purchase Order, isi ke field po_number dengan format wajib AAAAA-999999-999999 (5 karakter alfanumerik, lalu 6 digit angka, lalu 6 digit angka). Selain itu, salin semua kandidat teks PO apa adanya ke po_raw_candidates.";
     }
 }
