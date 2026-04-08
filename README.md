@@ -189,3 +189,15 @@ brew install poppler
 
 Setelah itu jalankan ulang aplikasi.
 
+
+
+## Memory PO Vendor
+
+Sekarang aplikasi mendukung memory sederhana untuk PO per vendor:
+
+- Saat hasil analisa sudah benar, isi form **Simpan Memory PO** di UI.
+- Data disimpan ke file `storage/memory.json`.
+- Pada upload berikutnya, jika `po_number` tidak terbaca dari dokumen tapi vendor cocok, sistem akan isi `po_number` dari memory (`po_source: memory_fallback`).
+
+Endpoint yang dipakai UI:
+- `POST ?action=confirm_memory` dengan payload JSON `{ "vendor": "...", "po_number": "..." }`.

@@ -10,7 +10,6 @@ function jsonResponse(array $payload, int $status = 200): never
     exit;
 }
 
-
 function uploadErrorMessage(int $code): string
 {
     return match ($code) {
@@ -28,7 +27,7 @@ function uploadErrorMessage(int $code): string
 function parseIniSizeToBytes(string $value): int
 {
     $value = trim($value);
-    if ($value == '') {
+    if ($value === '') {
         return 0;
     }
 
@@ -72,6 +71,7 @@ function loadEnv(string $path): void
 
 $rootPath = dirname(__DIR__);
 loadEnv($rootPath . '/.env');
+require_once $rootPath . '/services/MemoryStore.php';
 require_once $rootPath . '/services/InvoiceProcessor.php';
 
 $maxUploadMb = (int) (getenv('MAX_UPLOAD_MB') ?: 10);
@@ -81,6 +81,24 @@ $phpPostMaxBytes = parseIniSizeToBytes((string) ini_get('post_max_size'));
 $effectiveMaxUploadBytes = min(array_filter([$appMaxUploadBytes, $phpUploadMaxBytes, $phpPostMaxBytes]));
 $effectiveMaxUploadMb = (int) floor($effectiveMaxUploadBytes / (1024 * 1024));
 $allowedExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'txt'];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'confirm_memory') {
+    $payload = json_decode((string) file_get_contents('php://input'), true);
+    $vendor = trim((string) ($payload['vendor'] ?? ''));
+    $poNumber = trim((string) ($payload['po_number'] ?? ''));
+
+    try {
+        $memoryStore = new MemoryStore($rootPath . '/storage/memory.json');
+        $memoryStore->saveConfirmedPo($vendor, $poNumber);
+        jsonResponse([
+            'message' => 'Memory PO berhasil disimpan.',
+            'vendor' => $vendor,
+            'po_number' => $poNumber,
+        ]);
+    } catch (Throwable $exception) {
+        jsonResponse(['error' => $exception->getMessage()], 400);
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload') {
     if (!isset($_FILES['invoice'])) {
@@ -135,9 +153,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
     }
 
     try {
+        $memoryStore = new MemoryStore($rootPath . '/storage/memory.json');
         $processor = new InvoiceProcessor(
             getenv('OLLAMA_BASE_URL') ?: 'http://localhost:11434',
-            getenv('OLLAMA_MODEL') ?: 'gemma4'
+            getenv('OLLAMA_MODEL') ?: 'gemma4',
+            $memoryStore
         );
 
         $result = $processor->process($targetPath);
@@ -174,11 +194,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
       <h2>Hasil</h2>
       <pre id="result">Belum ada data.</pre>
     </section>
+
+    <section>
+      <h2>Simpan Memory PO</h2>
+      <p>Jika hasil sudah benar, simpan vendor + PO agar jadi memory.</p>
+      <form id="memory-form">
+        <input type="text" id="vendor" placeholder="Nama Vendor" required />
+        <input type="text" id="po_number" placeholder="Nomor PO" required />
+        <button type="submit">Simpan Memory</button>
+      </form>
+      <pre id="memory-result">Belum ada memory update.</pre>
+    </section>
   </main>
 
   <script>
     const form = document.getElementById('upload-form');
     const resultBox = document.getElementById('result');
+    const memoryForm = document.getElementById('memory-form');
+    const memoryResult = document.getElementById('memory-result');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -205,8 +238,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
         const response = await fetch('?action=upload', { method: 'POST', body: formData });
         const data = await response.json();
         resultBox.textContent = JSON.stringify(data, null, 2);
+
+        if (data.analysis) {
+          document.getElementById('vendor').value = data.analysis.vendor || '';
+          document.getElementById('po_number').value = data.analysis.po_number || '';
+        }
       } catch (err) {
         resultBox.textContent = `Gagal: ${err}`;
+      }
+    });
+
+    memoryForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      memoryResult.textContent = 'Menyimpan memory...';
+
+      const payload = {
+        vendor: document.getElementById('vendor').value,
+        po_number: document.getElementById('po_number').value,
+      };
+
+      try {
+        const response = await fetch('?action=confirm_memory', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        memoryResult.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        memoryResult.textContent = `Gagal simpan memory: ${err}`;
       }
     });
   </script>

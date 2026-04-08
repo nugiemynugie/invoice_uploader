@@ -6,11 +6,13 @@ class InvoiceProcessor
 {
     private string $ollamaBaseUrl;
     private string $modelName;
+    private ?MemoryStore $memoryStore;
 
-    public function __construct(string $ollamaBaseUrl, string $modelName)
+    public function __construct(string $ollamaBaseUrl, string $modelName, ?MemoryStore $memoryStore = null)
     {
         $this->ollamaBaseUrl = rtrim($ollamaBaseUrl, '/');
         $this->modelName = $modelName;
+        $this->memoryStore = $memoryStore;
     }
 
     public function process(string $filePath): array
@@ -23,6 +25,8 @@ class InvoiceProcessor
             'pdf' => $this->analyzePdfInvoice($filePath),
             default => throw new InvalidArgumentException("Format file tidak didukung: {$extension}"),
         };
+
+        $result = $this->applyMemoryFallback($result);
 
         return [
             'filename' => basename($filePath),
@@ -37,7 +41,7 @@ class InvoiceProcessor
             throw new RuntimeException('Isi file TXT kosong.');
         }
 
-        $prompt = $this->basePrompt() . "\n\nISI INVOICE (TEXT):\n" . $text;
+        $prompt = $this->basePromptWithMemoryHint() . "\n\nISI INVOICE (TEXT):\n" . $text;
         $content = $this->callOllama([
             ['role' => 'system', 'content' => 'Kamu asisten ekstraksi data invoice ke JSON.'],
             ['role' => 'user', 'content' => $prompt],
@@ -48,7 +52,7 @@ class InvoiceProcessor
 
     private function analyzeImageInvoice(string $imagePath): array
     {
-        $prompt = $this->basePrompt() . "\n\nBaca detail invoice dari gambar yang dikirim.";
+        $prompt = $this->basePromptWithMemoryHint() . "\n\nBaca detail invoice dari gambar yang dikirim.";
         $imageBase64 = base64_encode((string) file_get_contents($imagePath));
 
         $content = $this->callOllama([
@@ -66,7 +70,7 @@ class InvoiceProcessor
             throw new RuntimeException('Gagal mengonversi PDF ke gambar untuk dibaca Ollama.');
         }
 
-        $prompt = $this->basePrompt() . "\n\nBaca isi invoice dari halaman PDF (dikirim sebagai gambar).";
+        $prompt = $this->basePromptWithMemoryHint() . "\n\nBaca isi invoice dari halaman PDF (dikirim sebagai gambar).";
         $content = $this->callOllama([
             ['role' => 'system', 'content' => 'Kamu asisten vision untuk membaca invoice PDF dan mengubahnya ke JSON.'],
             ['role' => 'user', 'content' => $prompt, 'images' => $images],
@@ -219,6 +223,46 @@ class InvoiceProcessor
 
         if (!is_array($analysis)) {
             throw new RuntimeException('Output model bukan JSON valid.');
+        }
+
+        return $analysis;
+    }
+
+
+    private function basePromptWithMemoryHint(): string
+    {
+        $basePrompt = $this->basePrompt();
+        if ($this->memoryStore === null) {
+            return $basePrompt;
+        }
+
+        return $basePrompt
+            . "\nTambahan: jika vendor cocok dengan memory internal, prioritaskan PO berdasarkan konteks invoice.";
+    }
+
+    private function applyMemoryFallback(array $analysis): array
+    {
+        if ($this->memoryStore === null) {
+            return $analysis;
+        }
+
+        $vendor = (string) ($analysis['vendor'] ?? '');
+        $poNumber = trim((string) ($analysis['po_number'] ?? ''));
+
+        if ($vendor === '') {
+            return $analysis;
+        }
+
+        $poHint = $this->memoryStore->getPoHint($vendor);
+        if ($poHint === null || $poHint === '') {
+            return $analysis;
+        }
+
+        if ($poNumber === '') {
+            $analysis['po_number'] = $poHint;
+            $analysis['po_source'] = 'memory_fallback';
+        } else {
+            $analysis['po_source'] = 'document';
         }
 
         return $analysis;
