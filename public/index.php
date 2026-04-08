@@ -218,26 +218,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
     const memoryForm = document.getElementById('memory-form');
     const memoryResult = document.getElementById('memory-result');
 
+    function shortValue(value) {
+      const text = String(value || '').trim();
+      if (text.length <= 28) return text;
+      return text.slice(0, 28) + '...';
+    }
+
     function buildVariableRecommendations(analysis) {
-      const options = [{ value: 'analysis.po_number', label: 'analysis.po_number (Recommended)' }];
+      const options = [];
+
+      const addOption = (path, sample, recommended = false) => {
+        if (!sample) return;
+        const prefix = recommended ? '(Recommended) ' : '';
+        options.push({
+          value: path,
+          label: `${prefix}${path} => ${shortValue(sample)}`,
+          sample,
+        });
+      };
 
       if (!analysis || typeof analysis !== 'object') {
+        addOption('analysis.po_number', '', true);
         return options;
       }
+
+      addOption('analysis.po_number', analysis.po_number || '', true);
 
       for (const [key, value] of Object.entries(analysis)) {
         if (typeof value !== 'string' || value.trim() === '') continue;
         if (/po|purchase\s*order/i.test(key) || /po|purchase\s*order/i.test(value)) {
-          options.push({ value: `analysis.${key}`, label: `analysis.${key}` });
+          addOption(`analysis.${key}`, value);
         }
       }
 
       if (typeof analysis.invoice_number === 'string' && analysis.invoice_number) {
-        options.push({ value: 'analysis.invoice_number', label: 'analysis.invoice_number' });
+        addOption('analysis.invoice_number', analysis.invoice_number);
       }
 
       if (typeof analysis.notes === 'string' && analysis.notes) {
-        options.push({ value: 'analysis.notes', label: 'analysis.notes' });
+        addOption('analysis.notes', analysis.notes);
       }
 
       return options;
@@ -247,7 +266,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'upload
       const select = document.getElementById('source_variable');
       select.innerHTML = '';
       const seen = new Set();
-      for (const option of buildVariableRecommendations(analysis)) {
+      const built = buildVariableRecommendations(analysis);
+      if (built.length === 0) {
+        built.push({ value: 'analysis.po_number', label: '(Recommended) analysis.po_number => (kosong)' });
+      }
+      for (const option of built) {
         if (seen.has(option.value)) continue;
         seen.add(option.value);
         const el = document.createElement('option');

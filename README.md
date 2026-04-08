@@ -198,7 +198,7 @@ Sekarang aplikasi mendukung memory sederhana untuk PO per vendor:
 - Saat hasil analisa sudah benar, isi form **Simpan Memory PO** di UI.
 - Data disimpan ke file `storage/memory.json`.
 
-- Saat simpan memory, Anda bisa pilih `source_variable` (rekomendasi otomatis dari hasil analisa, mis. `analysis.po_number`, `analysis.notes`, `analysis.invoice_number`).
+- Saat simpan memory, Anda bisa pilih `source_variable` dengan rekomendasi otomatis **beserta contoh value** dari hasil analisa (mis. `analysis.po_number => AB123-123456-789012`).
 - Pada upload berikutnya, jika `po_number` tidak terbaca dari dokumen tapi vendor cocok, sistem akan isi `po_number` dari memory (`po_source: memory_fallback`).
 
 Endpoint yang dipakai UI:
